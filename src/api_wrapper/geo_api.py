@@ -17,6 +17,11 @@ class GeoAPI(API):
             '?contours_minutes':'%2c'.join(['5', '10', '15', '20']),
             'polygons':'true',
             'access_token':key}
+
+    request_str = mapbox_api.get_request_str(options)
+
+    mapbox_api.get_json(request_str)
+    mapbox_api.request_to_geojson(request_str, '/path/to/file.geojson)
     """
     
     def __init__(self, base_url):
@@ -34,12 +39,22 @@ class MapboxAPI(object):
     """Wrapper for Mapbox API
 
     Usage: 
+        dotenv_path = '../../.env'
+    dotenv.load_dotenv(dotenv_path)
+
+    key = os.environ['MAPBOX_ISO_APIKEY']
+
     mapbox_api= MapboxAPI(key)
-    iso_options = {'travel_type':'driving',
-                   'lat':'39.673203005',
-                   'lng':'-105.15742179',
-                   'contours_minutes':['10', '20', '30']),
-                   'polygons':'true'}
+
+    options = dict(travel_type = 'driving',
+                   lng = '-105.15742179',
+                   lat = '39.673203005',
+                   contours_minutes=['10', '20', '30'],
+                   polygons = 'true')
+
+    request_str = mapbox_api.get_iso_request_str(**options)
+
+    mapbox_api.iso_to_geojson('../../test_data/test.geojson', **options)
     """
     
     def __init__(self, key):
@@ -95,12 +110,11 @@ if __name__ == '__main__':
 
     mapbox_api= MapboxAPI(key)
 
-    options = dict(
-    travel_type = 'driving',
-    lng = '-105.15742179',
-    lat = '39.673203005',
-    contours_minutes=['10', '20', '30'],
-    polygons = 'true')
+    options = dict(travel_type = 'driving',
+                   lng = '-105.15742179',
+                   lat = '39.673203005',
+                   contours_minutes=['10', '20', '30'],
+                   polygons = 'true')
 
     request_str = mapbox_api.get_iso_request_str(**options)
 
