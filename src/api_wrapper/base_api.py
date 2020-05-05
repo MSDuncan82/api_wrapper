@@ -6,7 +6,6 @@ class API(object):
     """A simple wrapper to interact with web apis
 
     Usage: 
-
     mapbox_api= API('https://api.mapbox.com/isochrone/v1/mapbox')
     options = {'/driving':None,
             '%2C':[lng, lat],
@@ -14,6 +13,9 @@ class API(object):
             'polygons':'true',
             'access_token':key}
 
+    request_str = mapbox_api.get_request_str(options)
+
+    mapbox_api.get_json(request_str)
     """
     
     def __init__(self, base_url):
@@ -32,7 +34,7 @@ class API(object):
                 options_list.append(f'{k}={v}')
 
             elif isinstance(v, dict):
-                options_list.append(self.build_request_str(v))
+                options_list.append(self.get_request_str(v))
             
             else:
                 options_list.append(k.join(v))
