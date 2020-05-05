@@ -2,7 +2,7 @@
 
 An API to use pure python to simply interact with web APIs.
 
-## API
+## Supported APIs
 
-### GeoAPIS:
+### Geo-APIS:
 [Mapbox](api_docs/mapbox.md)

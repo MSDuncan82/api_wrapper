@@ -3,7 +3,6 @@ import dotenv
 import os
 from base_api import API
 import geopandas as gpd
-dotenv.load_dotenv()
 
 class GeoAPI(API):
     """A simple wrapper to interact with geocoding web apis
@@ -39,16 +38,14 @@ class MapboxAPI(object):
     """Wrapper for Mapbox API
 
     Usage: 
-        dotenv_path = '../../.env'
-    dotenv.load_dotenv(dotenv_path)
 
     key = os.environ['MAPBOX_ISO_APIKEY']
 
     mapbox_api= MapboxAPI(key)
 
     options = dict(travel_type = 'driving',
-                   lng = '-105.15742179',
-                   lat = '39.673203005',
+                   lng = '-105.2',
+                   lat = '39.7',
                    contours_minutes=['10', '20', '30'],
                    polygons = 'true')
 
