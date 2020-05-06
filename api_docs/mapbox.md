@@ -1,7 +1,7 @@
 # Mapbox
 
 ```python
-from api_wrapper.geo_api import MapboxAPI
+from api_wrapper.api import MapboxAPI
 
 key = os.environ['MAPBOX_ISO_APIKEY']
 
