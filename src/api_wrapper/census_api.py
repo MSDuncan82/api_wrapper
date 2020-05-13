@@ -77,7 +77,10 @@ class CensusAPI(object):
             state_cols["state_name"]
         )
 
-        return state_fips_df.to_dict()[state_cols["state_fip"]]
+        state_fips_dict = state_fips_df.to_dict()[state_cols["state_fip"]]
+        state_fips_dict.update({fip: fip for fip in state_fips_dict.values()})
+
+        return state_fips_dict
 
     def _get_county_fips_dict(self, fips_df):
         """Return dict with keys = ('state', 'county_name'), values='FIP code'"""
@@ -94,7 +97,10 @@ class CensusAPI(object):
             [county_cols["state_fip"], county_cols["county_name"]]
         )
 
-        return county_fips_df.to_dict()[county_cols["county_fip"]]
+        county_fips_dict = county_fips_df.to_dict()[county_cols["county_fip"]]
+        county_fips_dict.update({fip: fip for fip in county_fips_dict.values()})
+
+        return county_fips_dict
 
 
 class CensusBoundaries(CensusAPI):
@@ -236,6 +242,7 @@ class CensusBoundaries(CensusAPI):
 
         return z
 
+
 class CensusDataAPI(CensusAPI):
     """
     API wrapper for retrieving data from the census website.
@@ -267,21 +274,26 @@ class CensusDataAPI(CensusAPI):
         super().__init__(year=year)
         self.survey = survey
 
-        self.tables_dict = {
-            "pop": {"values": ["B01003_001E"], "moe": ["B01003_001M"]},
-            "HI": {
-                "values": [f"B19001_0{table_num:02}E" for table_num in range(1, 17)],
-                "moe": [f"B19001_0{table_num:02}M" for table_num in range(1, 17)],
-            },
-            "med_HI": {"values": ["B19013_001E"], "moe": ["B19013_001M"]},
-            "agg_HI": {"values": ["B19025_001E"], "moe": ["B19025_001M"]},
-            "age": {
-                "values": [f"B01001_0{table_num:02}E" for table_num in range(1, 49)],
-                "moe": [f"B01001_0{table_num:02}M" for table_num in range(1, 49)],
-            },
-        }
+        # self.tables_dict = {
+            # "pop": {"values": ["B01003_001E"], "moe": ["B01003_001M"]},
+            # "HI": {
+                # "values": [f"B19001_0{table_num:02}E" for table_num in range(1, 17)],
+                # "moe": [f"B19001_0{table_num:02}M" for table_num in range(1, 17)],
+            # },
+            # "med_HI": {"values": ["B19013_001E"], "moe": ["B19013_001M"]},
+            # "agg_HI": {"values": ["B19025_001E"], "moe": ["B19025_001M"]},
+            # "age": {
+                # "values": [f"B01001_0{table_num:02}E" for table_num in range(1, 49)],
+                # "moe": [f"B01001_0{table_num:02}M" for table_num in range(1, 49)],
+            # },
+        # }
 
-    def get_data(self, tables=None, state="Colorado", level="block"):
+        self.tables_dict = {'pop':'B01003', 'HI':'B19001', 'med_HI':'B19013', 'agg_HI':'B19025'}
+
+        hierarchies_csv = "../../data/geo_hierarchies.csv"
+        self.hierarchies_dict = self._get_hierarchies(hierarchies_csv)
+
+    def get_data(self, tables=None, **kwargs):
         """
         Get data from survey and year of class for given tables and geoids
         
@@ -305,7 +317,10 @@ class CensusDataAPI(CensusAPI):
 
         table_ids = self._get_table_ids(tables)
 
-        df = self._get_acs_dfs(table_ids, state, level)
+        df = self._get_acs_dfs(table_ids, **kwargs)
+
+        #FIXME self._get_table_descrtiption is half finished but gotta climb
+        df.columns = [self._get_table_descrption(col) for col in df.columns]
 
         return df
 
@@ -322,40 +337,104 @@ class CensusDataAPI(CensusAPI):
         return table_ids
 
     def _parse_table_str(self, table_str):
-        """Return table_id from table _str"""
+        """Return table_id from table str"""
 
-        table_dict = self.tables_dict.get(table_str)
+        base_table_id = self.tables_dict.get(table_str)
 
-        if table_dict is None:
-            return [table_str]
+        if base_table_id is None:
+            return [base_table_id]
 
-        tables = table_dict["values"] + table_dict["moe"]
+        tables_dict = censusdata.censustable(self.survey, self.year, base_table_id) 
 
-        return tables
+        final_table_dict = {}
+        for table_id, table_dict in tables_dict.items():
 
-    # TODO Account for geographical hierarchies other than level=county
-    def _get_acs_dfs(self, tables, state, level):
+            table_label = table_dict['concept'] + '!!' + table_dict['label']
+            table_id_moe = table_id.replace('E', 'M')
+            table_label_moe = "MOE!!" + table_label
+
+            final_table_dict.update({table_id:table_label, table_id_moe:table_label_moe})
+
+        return final_table_dict
+
+    def _get_acs_dfs(self, tables, **kwargs):
         """Get American Community Survey data"""
 
-        state_fip = self.state_fips[state]
-        breakpoint()
+        hierarchy = self._parse_hierarchy(kwargs)
+
         df = censusdata.download(
-            self.survey,
-            self.year,
-            censusdata.censusgeo([("state", state_fip), (level, "*")]),
-            tables,
+            self.survey, self.year, censusdata.censusgeo(hierarchy), tables,
         )
 
         return df
 
+    def _parse_hierarchy(self, kwargs):
+        """Parse **kwargs (i.e. state='Colorado', county='Jefferson County')
+        into [('state', '08'), ('county', '059')]"""
+
+        kwargs["state"] = self.state_fips[kwargs["state"]]
+        if "county" in kwargs:
+            kwargs["county"] = self.county_fips[(kwargs["state"], kwargs["county"])]
+
+        for level_key, hierarchy_list in self.hierarchies_dict.items():
+
+            are_all_kwargs_in_list = all(
+                [level in kwargs.keys() for level in hierarchy_list]
+            )
+            is_hierachy_correct_length = len(kwargs) == len(hierarchy_list)
+
+            if are_all_kwargs_in_list and is_hierachy_correct_length:
+                break
+
+        hierarchy_fips = [(level, kwargs[level]) for level in hierarchy_list]
+
+        hierarchy_fips = self._rename_levels(hierarchy_fips)
+
+        return hierarchy_fips
+
+    def _rename_levels(self, lst):
+
+        levels_rename_dict = {'census_tract':'tract', 'block_group':'block group'}
+
+        out_lst = []
+        for level_key, fip in lst:
+            if level_key in levels_rename_dict:
+                level_key = levels_rename_dict[level_key]
+
+            out_lst.append((level_key, fip))
+
+        return out_lst
+
     # TODO Actually make human readable
     def _get_table_descrption(self, table):
-        '''Get human readable table name'''
-        
+        """Get human readable table name"""
+        breakpoint()
         table_labels_dict = censusdata.censustable(self.survey, self.year, table)
         table_label_dict = table_labels_dict[table]
 
-        return table_label_dict['label'], table_label_dict['concept']
+        return table_label_dict["label"], table_label_dict["concept"]
+
+    def _get_hierarchies(self, csv):
+
+        hierarchies_df = pd.read_csv(csv)
+
+        hierarchies_list = hierarchies_df.name.str.split("-")
+        hierarchies_list = map(
+            lambda lst: [string.lower() for string in lst], hierarchies_list
+        )
+
+        hierarchies_dict = {
+            hierarchy_list[-1]: hierarchy_list for hierarchy_list in hierarchies_list
+        }
+        hierarchies_dict["block"] = hierarchies_dict["block group"] + ["block"]
+
+        hierarchies_dict = {
+            level_key.replace(" ", "_"): [level.replace(" ", "_") for level in levels]
+            for level_key, levels in hierarchies_dict.items()
+        }
+
+        return hierarchies_dict
+
 
 if __name__ == "__main__":
 
@@ -371,5 +450,7 @@ if __name__ == "__main__":
     # print(block_gdf.head())
 
     census_data = CensusDataAPI("acs5", 2018)
-    co_data = census_data.get_data(state="Colorado", level="county")
+    co_data = census_data.get_data(
+        state="Colorado", county="Jefferson County", census_tract="011724", block_group="*"
+    )
     print(co_data.head())
