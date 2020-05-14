@@ -288,7 +288,7 @@ class CensusDataAPI(CensusAPI):
             # },
         # }
 
-        self.tables_dict = {'pop':'B01003', 'HI':'B19001', 'med_HI':'B19013', 'agg_HI':'B19025'}
+        self.tables_dict = {'pop':'B01003', 'HI':'B19001', 'med_HI':'B19013', 'agg_HI':'B19025', 'age':'B01001'}
 
         hierarchies_csv = "../../data/geo_hierarchies.csv"
         self.hierarchies_dict = self._get_hierarchies(hierarchies_csv)
@@ -315,26 +315,28 @@ class CensusDataAPI(CensusAPI):
         if tables is None:
             tables = ["pop", "age", "med_HI"]
 
-        table_ids = self._get_table_ids(tables)
+        table_label_dict = self._get_table_dict(tables)
+        table_ids = list(table_label_dict.keys())
 
         df = self._get_acs_dfs(table_ids, **kwargs)
 
         #FIXME self._get_table_descrtiption is half finished but gotta climb
-        df.columns = [self._get_table_descrption(col) for col in df.columns]
+        breakpoint()
+        df.columns = [table_label_dict[col] for col in df.columns]
 
         return df
 
-    def _get_table_ids(self, tables):
+    def _get_table_dict(self, tables):
         """Return table ids from list of tables ids and strings"""
 
-        table_list_of_lists = [self._parse_table_str(table_str) for table_str in tables]
+        table_list_of_dicts = [self._parse_table_str(table_str) for table_str in tables]
 
-        # flatten lists of lists
-        table_ids = [
-            table for table_list in table_list_of_lists for table in table_list
-        ]
+        table_label_dict = {}
+        # flatten list of dicts
+        for table_dict in table_list_of_dicts:
+            table_label_dict.update(table_dict)
 
-        return table_ids
+        return table_label_dict
 
     def _parse_table_str(self, table_str):
         """Return table_id from table str"""
@@ -342,7 +344,7 @@ class CensusDataAPI(CensusAPI):
         base_table_id = self.tables_dict.get(table_str)
 
         if base_table_id is None:
-            return [base_table_id]
+            return [table_str]
 
         tables_dict = censusdata.censustable(self.survey, self.year, base_table_id) 
 
@@ -408,11 +410,8 @@ class CensusDataAPI(CensusAPI):
     # TODO Actually make human readable
     def _get_table_descrption(self, table):
         """Get human readable table name"""
-        breakpoint()
-        table_labels_dict = censusdata.censustable(self.survey, self.year, table)
-        table_label_dict = table_labels_dict[table]
 
-        return table_label_dict["label"], table_label_dict["concept"]
+        return table
 
     def _get_hierarchies(self, csv):
 
