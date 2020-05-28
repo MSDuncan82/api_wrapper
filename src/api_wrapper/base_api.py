@@ -2,6 +2,7 @@ import requests
 import dotenv
 import os
 
+
 class API(object):
     """A simple wrapper to interact with web apis
 
@@ -17,29 +18,29 @@ class API(object):
 
     mapbox_api.get_json(request_str)
     """
-    
+
     def __init__(self, base_url):
 
-        self.base_url = base_url.strip('/')
+        self.base_url = base_url.strip("/")
 
     def get_request_str(self, options):
-        
+
         options_list = []
         for k, v in options.items():
-            
+
             if v == None:
                 options_list.append(k)
-            
+
             elif isinstance(v, str):
-                options_list.append(f'{k}={v}')
+                options_list.append(f"{k}={v}")
 
             elif isinstance(v, dict):
                 options_list.append(self.get_request_str(v))
-            
+
             else:
                 options_list.append(k.join(v))
-            
-        request_str = self.base_url + ''.join(options_list)
+
+        request_str = self.base_url + "".join(options_list)
 
         print(request_str)
         return request_str
@@ -60,22 +61,25 @@ class API(object):
 
         return response.json()
 
-if __name__ == '__main__':
 
-    dotenv_path = '../../.env'
+if __name__ == "__main__":
+
+    dotenv_path = "../../.env"
     dotenv.load_dotenv(dotenv_path)
 
-    key = os.environ['MAPBOX_ISO_APIKEY']
+    key = os.environ["MAPBOX_ISO_APIKEY"]
 
-    mapbox_api= API('https://api.mapbox.com/isochrone/v1/mapbox')
+    mapbox_api = API("https://api.mapbox.com/isochrone/v1/mapbox")
 
-    lng = '-105.15742179'
-    lat = '39.673203005'
-    options = {'/driving/':None,
-            '%2C':[lng, lat],
-            '?contours_minutes':'%2c'.join(['5', '10', '15', '20']),
-            '&polygons':'true',
-            '&access_token':key}
+    lng = "-105.15742179"
+    lat = "39.673203005"
+    options = {
+        "/driving/": None,
+        "%2C": [lng, lat],
+        "?contours_minutes": "%2c".join(["5", "10", "15", "20"]),
+        "&polygons": "true",
+        "&access_token": key,
+    }
 
     request_str = mapbox_api.get_request_str(options)
 

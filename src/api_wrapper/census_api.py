@@ -13,10 +13,13 @@ Usage:
 import pandas as pd
 import geopandas as gpd
 import os
+import shutil
 import censusdata
 import requests
 import io
 import zipfile
+
+from proj_paths.paths import Paths
 
 
 class CensusAPI(object):
@@ -37,30 +40,86 @@ class CensusAPI(object):
     Methods
     -------
     None
-
     """
 
-    def __init__(self, year=2018):
+    def __init__(self, year=2018, table_data_dir=None, fips_sheet=None):
         """Initiate CensusAPI object for a given year"""
 
         self.year = int(year)
-        self.state_fips, self.county_fips = self._get_fips(f"{self.year}")
 
-        self.table_list = pd.read_excel(
-            "https://www2.census.gov/programs-surveys/acs/tech_docs/table_shells/table_lists/2018_DataProductList.xlsx?#"
-        )
+        if table_data_dir is None:
+            table_data_dir = self._parse_table_zip(
+                "https://www2.census.gov/programs-surveys/acs/summary_file/2018/data/2018_5yr_Summary_FileTemplates.zip?#",
+                'summary_table_metadata'
+            )
+
+        self.table_meta_data = self._parse_table_data(table_data_dir)
+
+        if fips_sheet is None:
+            fips_sheet = f"https://www2.census.gov/programs-surveys/popest/geographies/{year}/all-geocodes-v{year}.xlsx"
+
+        self.fips_df = self._parse_sheet(fips_sheet, header=4, dtype=str)
+        self.state_fips, self.county_fips = self._get_fips(f"{self.year}")
+        self.state_names = {fip:name for name, fip in self.state_fips.items() if not name.isnumeric()}
+
+        self.paths = Paths()
+
+    def _parse_table_data(self, table_metadata_dir): 
+        """Get dataframe for table metadata"""
+        
+        seq_files = [os.path.join(table_metadata_dir, file) for file in os.listdir(table_metadata_dir) if file.endswith('.xlsx') and 'seq' in file]
+        seq_df_lst = [self._parse_seq_excel(file) for file in seq_files]
+
+        table_metadata_df = pd.concat(seq_df_lst, axis=0)
+        table_metadata_df.columns = ['overall_category'] + [f'subtitle_{n}' for n in range(8)]
+        return table_metadata_df
+
+    def _parse_seq_excel(self, seq_excel_file):
+        """Parse seq.xlsx files"""
+
+        df = pd.read_excel(seq_excel_file)
+        df = df.drop(df.columns[:6], axis=1)
+        
+        df = df.T
+        df.columns = ['table_data']
+        
+        df['table_data'] = df.table_data.str.split('%')
+        df = pd.DataFrame(df['table_data'].to_list(), index=df.index)
+        
+        return df
+
+    def _parse_table_zip(self, table_data, dirname):
+        """Get local directory from zip file url"""
+
+        r = requests.get(table_data, stream=True)
+
+        with zipfile.ZipFile(io.BytesIO(r.content)) as summary_zip:
+            temp_directory = f"/tmp/{dirname}"
+
+            if os.path.isdir(temp_directory):
+                shutil.rmtree(temp_directory)
+
+            os.mkdir(temp_directory)
+            summary_zip.extractall(temp_directory)
+
+        return temp_directory
+
+    def _parse_sheet(self, sheet, **kwargs):
+        """Get dataframe from sheet file (.xlsx, .csv)"""
+
+        if sheet.endswith(".xlsx"):
+            df = pd.read_excel(sheet, **kwargs)
+
+        if sheet.endswith("csv"):
+            df = pd.read_csv(sheet, **kwargs)
+
+        return df
 
     def _get_fips(self, year):
         """Return FIP code dicts for geoids from self.year of the census"""
 
-        fips_df = pd.read_excel(
-            f"https://www2.census.gov/programs-surveys/popest/geographies/{year}/all-geocodes-v{year}.xlsx",
-            header=4,
-            dtype=str,
-        )
-
-        state_fips_dict = self._get_state_fips_dict(fips_df)
-        county_fips_dict = self._get_county_fips_dict(fips_df)
+        state_fips_dict = self._get_state_fips_dict(self.fips_df)
+        county_fips_dict = self._get_county_fips_dict(self.fips_df)
 
         return state_fips_dict, county_fips_dict
 
@@ -126,10 +185,10 @@ class CensusBoundaries(CensusAPI):
         The state_fip code is ignored if the level is 'county' or 'ttract'.
     """
 
-    def __init__(self, year=2018):
+    def __init__(self, year=2018, **kwargs):
         """Initiate CensusBoundaries object for a given year"""
 
-        super().__init__(year)
+        super().__init__(year=year, **kwargs)
 
         self.base_url = f"https://www2.census.gov/geo/tiger/TIGER{self.year}/"
         self.filepath_dict = {
@@ -274,23 +333,15 @@ class CensusDataAPI(CensusAPI):
         super().__init__(year=year)
         self.survey = survey
 
-        # self.tables_dict = {
-            # "pop": {"values": ["B01003_001E"], "moe": ["B01003_001M"]},
-            # "HI": {
-                # "values": [f"B19001_0{table_num:02}E" for table_num in range(1, 17)],
-                # "moe": [f"B19001_0{table_num:02}M" for table_num in range(1, 17)],
-            # },
-            # "med_HI": {"values": ["B19013_001E"], "moe": ["B19013_001M"]},
-            # "agg_HI": {"values": ["B19025_001E"], "moe": ["B19025_001M"]},
-            # "age": {
-                # "values": [f"B01001_0{table_num:02}E" for table_num in range(1, 49)],
-                # "moe": [f"B01001_0{table_num:02}M" for table_num in range(1, 49)],
-            # },
-        # }
+        self.tables_dict = {
+            "pop": "B01003",
+            "HI": "B19001",
+            "med_HI": "B19013",
+            "agg_HI": "B19025",
+            "age": "B01001",
+        }
 
-        self.tables_dict = {'pop':'B01003', 'HI':'B19001', 'med_HI':'B19013', 'agg_HI':'B19025', 'age':'B01001'}
-
-        hierarchies_csv = "../../data/geo_hierarchies.csv"
+        hierarchies_csv = self.paths.data.search_files('geo_hierarchies')
         self.hierarchies_dict = self._get_hierarchies(hierarchies_csv)
 
     def get_data(self, tables=None, **kwargs):
@@ -320,8 +371,6 @@ class CensusDataAPI(CensusAPI):
 
         df = self._get_acs_dfs(table_ids, **kwargs)
 
-        #FIXME self._get_table_descrtiption is half finished but gotta climb
-        breakpoint()
         df.columns = [table_label_dict[col] for col in df.columns]
 
         return df
@@ -346,16 +395,18 @@ class CensusDataAPI(CensusAPI):
         if base_table_id is None:
             return [table_str]
 
-        tables_dict = censusdata.censustable(self.survey, self.year, base_table_id) 
+        tables_dict = censusdata.censustable(self.survey, self.year, base_table_id)
 
         final_table_dict = {}
         for table_id, table_dict in tables_dict.items():
 
-            table_label = table_dict['concept'] + '!!' + table_dict['label']
-            table_id_moe = table_id.replace('E', 'M')
+            table_label = table_dict["concept"] + "!!" + table_dict["label"]
+            table_id_moe = table_id.replace("E", "M")
             table_label_moe = "MOE!!" + table_label
 
-            final_table_dict.update({table_id:table_label, table_id_moe:table_label_moe})
+            final_table_dict.update(
+                {table_id: table_label, table_id_moe: table_label_moe}
+            )
 
         return final_table_dict
 
@@ -395,8 +446,9 @@ class CensusDataAPI(CensusAPI):
         return hierarchy_fips
 
     def _rename_levels(self, lst):
+        """Rename levels in lst from (i.e. `census_tract` to `tract` for api call"""
 
-        levels_rename_dict = {'census_tract':'tract', 'block_group':'block group'}
+        levels_rename_dict = {"census_tract": "tract", "block_group": "block group"}
 
         out_lst = []
         for level_key, fip in lst:
@@ -407,13 +459,9 @@ class CensusDataAPI(CensusAPI):
 
         return out_lst
 
-    # TODO Actually make human readable
-    def _get_table_descrption(self, table):
-        """Get human readable table name"""
-
-        return table
-
     def _get_hierarchies(self, csv):
+        """Return geographical hierachies dict 
+        (i.e. key='census_tract', value=['state', 'county', 'census_tract']"""
 
         hierarchies_df = pd.read_csv(csv)
 
@@ -437,19 +485,26 @@ class CensusDataAPI(CensusAPI):
 
 if __name__ == "__main__":
 
+    census_api = CensusAPI()
+    census_boundaries = CensusBoundaries()
+    census_data = CensusDataAPI("acs5", 2018)
+
     # census_api = CensusAPI("2018")
     # co_fip_num = census_api.state_fips["Colorado"]
     # jeffco_fip_num = census_api.county_fips[(co_fip_num, "Jefferson County")]
     # print(f"CO FIP: {co_fip_num}, JeffCo FIP: {jeffco_fip_num}")
 
-    # census_bondaries = CensusBoundaries("2018")
-    # county_gdf = census_bondaries.get_boundaries_gdf("Colorado", "county")
-    # block_gdf = census_bondaries.get_boundaries_gdf("Colorado", "block")
+    # census_boundaries = CensusBoundaries("2018")
+    # county_gdf = census_boundaries.get_boundaries_gdf("Colorado", "county")
+    # block_gdf = census_boundaries.get_boundaries_gdf("Colorado", "block")
     # print(county_gdf.head())
     # print(block_gdf.head())
 
-    census_data = CensusDataAPI("acs5", 2018)
-    co_data = census_data.get_data(
-        state="Colorado", county="Jefferson County", census_tract="011724", block_group="*"
-    )
-    print(co_data.head())
+    # census_data = CensusDataAPI("acs5", 2018)
+    # co_data = census_data.get_data(
+        # state="Colorado",
+        # county="Jefferson County",
+        # census_tract="011724",
+        # block_group="*",
+    # )
+    # print(co_data.head())
