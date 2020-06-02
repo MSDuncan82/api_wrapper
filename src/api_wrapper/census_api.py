@@ -18,6 +18,7 @@ import censusdata
 import requests
 import io
 import zipfile
+import re
 
 from proj_paths.paths import Paths
 
@@ -62,9 +63,9 @@ class CensusAPI(object):
 
         self.state_names = {fip:name for name, fip in self.state_fips.items() if not name.isnumeric()}
         #TODO remove state fip in name tuple self.county_fips dict
-        self.county_names = {fip:name[1] for name, fip in self.county_fips.items() if not name[1].isnumeric()}
+        self.county_names = {f'{name[0]}{fip}':name[1] for name, fip in self.county_fips.items() if not name[1].isnumeric()}
 
-        self.paths = Paths(use_cws=False)
+        self.paths = Paths(root='/home/mike/projects/api_wrapper')
 
     def _parse_table_data(self, table_metadata_dir): 
         """Get dataframe for table metadata"""
@@ -344,7 +345,7 @@ class CensusDataAPI(CensusAPI):
         }
 
         hierarchies_csv = self.paths.data.search_files('geo_hierarchies')
-        breakpoint()
+
         self.hierarchies_dict = self._get_hierarchies(hierarchies_csv)
 
     def get_data(self, tables=None, **kwargs):
@@ -393,10 +394,10 @@ class CensusDataAPI(CensusAPI):
     def _parse_table_str(self, table_str):
         """Return table_id from table str"""
 
-        base_table_id = self.tables_dict.get(table_str)
+        if isinstance(table_str, dict):
+            return table_str
 
-        if base_table_id is None:
-            return [table_str]
+        base_table_id = self.tables_dict[table_str]
 
         tables_dict = censusdata.censustable(self.survey, self.year, base_table_id)
 
@@ -422,15 +423,23 @@ class CensusDataAPI(CensusAPI):
             self.survey, self.year, censusdata.censusgeo(hierarchy), tables,
         )
 
+        # df = self._parse_geo_index(df, hierarchy)
+
         return df
 
     def _parse_hierarchy(self, kwargs):
         """Parse **kwargs (i.e. state='Colorado', county='Jefferson County')
         into [('state', '08'), ('county', '059')]"""
 
-        kwargs["state"] = self.state_fips[kwargs["state"]]
-        if "county" in kwargs:
-            kwargs["county"] = self.county_fips[(kwargs["state"], kwargs["county"])]
+        if re.fullmatch(r'[A-Za-z]+', kwargs.get("state", '')):
+            kwargs["state"] = self.state_fips[kwargs["state"]]
+        elif "state" in kwargs:
+            print(f"Didn't match {kwargs['state']}")
+
+        if re.fullmatch(r'[A-Za-z\s]+', kwargs.get("county", '')):
+            kwargs["county"] = self.county_fips[kwargs['state'], kwargs["county"]]
+        elif "county" in kwargs:
+            print(f"Didn't match {kwargs['county']}")
 
         for level_key, hierarchy_list in self.hierarchies_dict.items():
 
@@ -447,6 +456,11 @@ class CensusDataAPI(CensusAPI):
         hierarchy_fips = self._rename_levels(hierarchy_fips)
 
         return hierarchy_fips
+
+    def _parse_geo_index(self, df, hierarchy):
+        """Parse GEOID and geometry names from index"""
+
+
 
     def _rename_levels(self, lst):
         """Rename levels in lst from (i.e. `census_tract` to `tract` for api call"""
@@ -483,14 +497,19 @@ class CensusDataAPI(CensusAPI):
             for level_key, levels in hierarchies_dict.items()
         }
 
-        return hierarchies_dict
+        hierarchies_dict['all_counties'] = ['county']
 
+        return hierarchies_dict
 
 if __name__ == "__main__":
 
     census_api = CensusAPI()
     census_boundaries = CensusBoundaries()
     census_data = CensusDataAPI()
+
+    census_data.get_data(
+        ['pop', {'B01003_001E':'Population!!Test'}], 
+        county="*")
 
     # census_api = CensusAPI("2018")
     # co_fip_num = census_api.state_fips["Colorado"]
