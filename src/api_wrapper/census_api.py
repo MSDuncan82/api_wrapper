@@ -21,7 +21,6 @@ import zipfile
 
 from proj_paths.paths import Paths
 
-
 class CensusAPI(object):
     """
     A base class to interact with census apis
@@ -65,7 +64,7 @@ class CensusAPI(object):
         #TODO remove state fip in name tuple self.county_fips dict
         self.county_names = {fip:name[1] for name, fip in self.county_fips.items() if not name[1].isnumeric()}
 
-        self.paths = Paths()
+        self.paths = Paths(use_cws=False)
 
     def _parse_table_data(self, table_metadata_dir): 
         """Get dataframe for table metadata"""
@@ -330,7 +329,7 @@ class CensusDataAPI(CensusAPI):
         method description
     """
 
-    def __init__(self, survey, year):
+    def __init__(self, survey='acs5', year=2018):
         """Initiate CensusDataAPI object for a specific `survey` and `year`"""
 
         super().__init__(year=year)
@@ -345,6 +344,7 @@ class CensusDataAPI(CensusAPI):
         }
 
         hierarchies_csv = self.paths.data.search_files('geo_hierarchies')
+        breakpoint()
         self.hierarchies_dict = self._get_hierarchies(hierarchies_csv)
 
     def get_data(self, tables=None, **kwargs):
@@ -490,7 +490,7 @@ if __name__ == "__main__":
 
     census_api = CensusAPI()
     census_boundaries = CensusBoundaries()
-    census_data = CensusDataAPI("acs5", 2018)
+    census_data = CensusDataAPI()
 
     # census_api = CensusAPI("2018")
     # co_fip_num = census_api.state_fips["Colorado"]
