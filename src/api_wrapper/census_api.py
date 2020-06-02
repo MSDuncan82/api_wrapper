@@ -60,7 +60,10 @@ class CensusAPI(object):
 
         self.fips_df = self._parse_sheet(fips_sheet, header=4, dtype=str)
         self.state_fips, self.county_fips = self._get_fips(f"{self.year}")
+
         self.state_names = {fip:name for name, fip in self.state_fips.items() if not name.isnumeric()}
+        #TODO remove state fip in name tuple self.county_fips dict
+        self.county_names = {fip:name[1] for name, fip in self.county_fips.items() if not name[1].isnumeric()}
 
         self.paths = Paths()
 
