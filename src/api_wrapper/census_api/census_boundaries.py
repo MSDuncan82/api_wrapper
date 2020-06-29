@@ -1,4 +1,4 @@
-from census_api import CensusAPI
+from api_wrapper.census_api.census_api import CensusAPI
 import geopandas as gpd
 import os
 import requests
