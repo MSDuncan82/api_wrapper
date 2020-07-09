@@ -5,6 +5,7 @@ import requests
 import io
 import zipfile
 
+
 class CensusBoundaries(CensusAPI):
     """
     API wrapper for retrieving census boundary files
@@ -145,6 +146,6 @@ class CensusBoundaries(CensusAPI):
         return z
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     census_boundaries = CensusBoundaries()
