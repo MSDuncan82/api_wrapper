@@ -312,8 +312,7 @@ class CensusDataAPI(CensusAPI):
             self.survey, self.year, censusdata.censusgeo(hierarchy), tables,
         )
 
-        # TODO
-        # df = self._parse_geo_index(df, hierarchy)
+        df = self._parse_geo_index(df)
 
         return df
 
@@ -347,10 +346,25 @@ class CensusDataAPI(CensusAPI):
 
         return hierarchy_fips
 
-    def _parse_geo_index(self, df, hierarchy):
-        """Parse GEOID and geometry names from index"""
-        # TODO
-        pass
+    def _parse_geo_index(self, df):
+        """Convert index to GEOIDs and add geo_label column"""
+
+        parsed_index_tuples = [self._parse_geo_single_index(index) for index in df.index]
+
+        geo_ids, geo_names = list(zip(*parsed_index_tuples)) # unzip index tuples
+
+        df['geo_names'] = geo_names
+        df.index = geo_ids
+
+        return df
+
+    def _parse_geo_single_index(self, geo_index):
+        """Parse GEOID and geometry names from a single index"""
+        
+        geo_label = geo_index.name
+        geo_code = ''.join([geo_tup[1] for geo_tup in geo_index.geo])
+
+        return geo_code, geo_label
 
     def _rename_levels(self, lst):
         """Rename levels in lst from (i.e. `census_tract` to `tract` for api call"""
@@ -397,13 +411,9 @@ if __name__ == "__main__":
     census_api = CensusAPI()
     census_data = CensusDataAPI()
 
-    census_data.get_data(
+    df = census_data.get_data(
         ["pop", {"B01003_001E": "Population!!Test"}], state="Colorado", county="*"
     )
-
-    import ipdb
-
-    ipdb.set_trace()
 
     # census_api = CensusAPI("2018")
     # co_fip_num = census_api.state_fips["Colorado"]
