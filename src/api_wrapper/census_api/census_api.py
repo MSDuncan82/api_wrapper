@@ -234,7 +234,8 @@ class CensusDataAPI(CensusAPI):
 
         df = self._get_acs_dfs(table_ids, **kwargs)
 
-        df.columns = [table_label_dict[col] for col in df.columns]
+        table_labels_row = pd.DataFrame.from_dict(table_label_dict, orient='index', columns=['table_labels']).T
+        df = table_labels_row.append(df)
 
         return df
 
@@ -293,12 +294,12 @@ class CensusDataAPI(CensusAPI):
 
         if re.fullmatch(r'[A-Za-z]+', kwargs.get("state", '')):
             kwargs["state"] = self.state_fips[kwargs["state"]]
-        elif "state" in kwargs:
+        elif "state" in kwargs and kwargs.get("state", '') != '*':
             print(f"Didn't match {kwargs['state']}")
 
         if re.fullmatch(r'[A-Za-z\s]+', kwargs.get("county", '')):
             kwargs["county"] = self.county_fips[kwargs['state'], kwargs["county"]]
-        elif "county" in kwargs:
+        elif "county" in kwargs and kwargs.get("county", '') != '*':
             print(f"Didn't match {kwargs['county']}")
 
         for level_key, hierarchy_list in self.hierarchies_dict.items():
@@ -365,12 +366,14 @@ class CensusDataAPI(CensusAPI):
 if __name__ == "__main__":
 
     census_api = CensusAPI()
-    census_boundaries = CensusBoundaries()
     census_data = CensusDataAPI()
 
     census_data.get_data(
         ['pop', {'B01003_001E':'Population!!Test'}], 
+        state='Colorado',
         county="*")
+
+    import ipdb; ipdb.set_trace()
 
     # census_api = CensusAPI("2018")
     # co_fip_num = census_api.state_fips["Colorado"]
